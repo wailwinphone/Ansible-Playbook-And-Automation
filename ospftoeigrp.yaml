@@ -1,0 +1,82 @@
+---
+- name: Convert OSPF Networks to EIGRP and Synchronize Configurations
+  hosts: R13S
+  gather_facts: false
+  connection: network_cli
+
+  vars:
+    ansible_network_os: ios
+    ansible_user: cisco
+    ansible_password: cisco
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: cisco
+    config_directory: "/home/wlp/Desktop/Configuration"
+
+  tasks:
+    - name: Retrieve OSPF network statements
+      ios_command:
+        commands:
+          - sh run | section ospf
+      register: ospf_config_output
+      failed_when: false
+
+    - name: Debug OSPF configuration output
+      debug:
+        msg: "{{ ospf_config_output }}"
+
+    - name: Extract OSPF network statements
+      set_fact:
+        ospf_networks: "{{ ospf_config_output.stdout_lines }}"
+
+    - name: Modify OSPF network statements
+      set_fact:
+        ospf_networks_modified: |
+          {% for line in ospf_networks %}
+          {% set modified_line = line | regex_replace(' area \\d+', '') %}
+          {{ modified_line }}
+          {% endfor %}
+
+    - name: Generate EIGRP configuration lines
+      set_fact:
+        eigrp_config_lines: |
+          router eigrp 1
+           no auto-summary
+          {% for line in ospf_networks_modified %}
+          {% if line | regex_search('^\\s*network') %}
+          {{ line }}
+          {% endif %}
+          {% endfor %}
+
+    - name: Debug EIGRP configuration lines
+      debug:
+        msg: "{{ eigrp_config_lines }}"
+
+    - name: Save EIGRP configuration to router
+      ios_config:
+        lines: "{{ eigrp_config_lines.split('\n') }}"
+      register: eigrp_configure_result
+
+    - name: Remove OSPF configuration
+      ios_config:
+        lines:
+          - no router ospf 2
+
+    - name: Save running configuration on router
+      ios_command:
+        commands:
+          - write memory
+
+    - name: Check EIGRP configuration for synchronization
+      ios_command:
+        commands:
+          - show running-config | section eigrp
+      register: eigrp_check_output
+
+    - name: Debug EIGRP configuration check
+      debug:
+        msg: "{{ eigrp_check_output.stdout }}"
+
+    - name: Output result message
+      debug:
+        msg: "Converted OSPF networks to EIGRP and synchronized configurations."

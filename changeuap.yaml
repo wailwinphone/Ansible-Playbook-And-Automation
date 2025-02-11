@@ -1,0 +1,24 @@
+---
+- name: Convert OSPF Networks to EIGRP and Synchronize Configurations
+  hosts: routers
+  gather_facts: false
+  connection: network_cli
+
+  vars:
+    ansible_network_os: ios
+    ansible_user: cisco
+    ansible_password: cisco
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: cisco
+
+  tasks:
+    - name: Configure new username and password
+      ios_config:
+        lines:
+          - username ansible privilege 15 password ansible
+
+    - name: Save configuration
+      ios_command:
+        commands: write memory
+

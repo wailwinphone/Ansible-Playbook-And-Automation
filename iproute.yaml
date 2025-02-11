@@ -1,0 +1,24 @@
+---
+- name: Configure OSPF on ALL
+  hosts: routers
+  gather_facts: false
+  connection: network_cli
+
+  vars:
+    ansible_network_os: ios
+    ansible_user: cisco
+    ansible_password: cisco
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: cisco
+
+  tasks:
+    - name: show IP routes
+      ios_command:
+        commands:
+          - conf t
+          - do show ip route
+      register: print_output
+
+    - debug:
+        var: print_output

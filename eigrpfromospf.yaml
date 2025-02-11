@@ -1,0 +1,71 @@
+---
+- name: Transfer OSPF configuration to EIGRP and save routes for each router
+  hosts: ospf_routers_area_2
+  gather_facts: false
+  connection: network_cli
+  vars:
+    ansible_network_os: ios
+    ansible_user: cisco
+    ansible_password: cisco
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: cisco
+    routes_directory: "/home/wlp/Desktop/Configuration"
+  tasks:
+    - name: Check for OSPF configuration and routes
+      ios_command:
+        commands:
+          - show running-config | include router ospf
+          - show ip route ospf
+      register: ospf_output
+      failed_when: false
+
+    - name: Transfer OSPF to EIGRP and save routes
+      when: ospf_output.stdout[0] is defined and ospf_output.stdout[1] is defined
+      block:
+        - name: Extract OSPF configuration lines
+          set_fact:
+            ospf_config_lines: "{{ ospf_output.stdout[0] }}"
+
+        - name: Extract OSPF routes
+          set_fact:
+            ospf_routes: "{{ ospf_output.stdout[1] }}"
+
+        - name: Convert OSPF to EIGRP configuration and prepare EIGRP routes
+          set_fact:
+            eigrp_config_lines: |
+              {% set ospf_instance = 0 %}
+              {% for line in ospf_config_lines %}
+                {% if line | regex_search('router ospf') %}
+                  {% set ospf_instance = line.split()[2] %}
+                  router eigrp {{ ospf_instance }}
+                {% elif line | regex_search('network ') %}
+                  network {{ line.split()[1] }} {{ line.split()[2] }}
+                {% endif %}
+              {% endfor %}
+            eigrp_routes: "{{ ospf_routes }}"
+
+        - name: Apply EIGRP configuration
+          ios_config:
+            lines: "{{ eigrp_config_lines.split('\n') }}"
+          register: config_result
+
+        - name: Save EIGRP configuration to file for each router
+          copy:
+            content: |
+              EIGRP Configuration:
+              {{ eigrp_config_lines }}
+
+              EIGRP Routes:
+              {{ eigrp_routes | join('\n') }}
+            dest: "{{ routes_directory }}/{{ inventory_hostname }}_routes.txt"
+
+        - name: Save running configuration
+          ios_command:
+            commands:
+              - write memory
+
+    - name: Output result message
+      debug:
+        msg: "OSPF configuration successfully transferred to EIGRP and routes saved for {{ inventory_hostname }}"
+

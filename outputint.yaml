@@ -1,0 +1,32 @@
+---
+- name: Save Interface Config and Running Config
+  hosts: R1,R2
+  gather_facts: false
+  connection: network_cli
+  vars:
+    ansible_network_os: ios
+    ansible_user: cisco
+    ansible_password: cisco
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: cisco
+  tasks:
+    - name: Run 'show ip interface brief' command
+      ios_command:
+        commands:
+          - show ip interface brief
+      register: ip_int_brief_output
+
+    - name: Run 'show running-config' command
+      ios_command:
+        commands:
+          - show running-config
+      register: running_config_output
+    - name: Concatenate command outputs
+      set_fact:
+        combined_output: "{{ ip_int_brief_output.stdout[0] + '\n\n' + running_config_output.stdout[0] }}"
+    - name: Save the information to a file
+      copy:
+        content: "{{ combined_output }}"
+        dest: "/home/wlp/Desktop/Configuration/{{ inventory_hostname }}.txt"
+

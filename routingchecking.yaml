@@ -1,0 +1,70 @@
+---
+- name: Check for EIGRP, OSPF, or RIP v2 protocols
+  hosts: eigrp_routers, ripv2_routers, ospf_routers_area_1, ospf_routers_area_2
+  gather_facts: false
+  connection: network_cli
+  vars:
+    ansible_network_os: ios
+    ansible_user: cisco
+    ansible_password: cisco
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: cisco
+  tasks:
+    - name: Check for EIGRP configuration
+      ios_command:
+        commands:
+          - show running-config | section eigrp
+      register: eigrp_config_output
+      failed_when: false
+
+    - name: Check for OSPF configuration
+      ios_command:
+        commands:
+          - show running-config | section ospf
+      register: ospf_config_output
+      failed_when: false
+
+    - name: Check for RIP v2 configuration
+      ios_command:
+        commands:
+          - show running-config | section rip
+      register: rip_config_output
+      failed_when: false
+
+    - name: Debug EIGRP output
+      debug:
+        var: eigrp_config_output
+
+    - name: Debug OSPF output
+      debug:
+        var: ospf_config_output
+
+    - name: Debug RIP output
+      debug:
+        var: rip_config_output
+
+    - name: Combine protocol configurations
+      set_fact:
+        protocol_config: |
+          {% if eigrp_config_output.stdout is defined and eigrp_config_output.stdout[0] %}
+          EIGRP Configuration:
+          {{ eigrp_config_output.stdout[0] }}
+          {% endif %}
+          {% if ospf_config_output.stdout is defined and ospf_config_output.stdout[0] %}
+          OSPF Configuration:
+          {{ ospf_config_output.stdout[0] }}
+          {% endif %}
+          {% if rip_config_output.stdout is defined and rip_config_output.stdout[0] %}
+          RIP v2 Configuration:
+          {{ rip_config_output.stdout[0] }}
+          {% endif %}
+
+    - name: Save the protocol configurations to a file
+      copy:
+        content: "{{ protocol_config }}"
+        dest: "/home/wlp/Desktop/Configuration/{{ inventory_hostname }}_protocols.txt"
+
+    - name: Output the protocol configurations
+      debug:
+        msg: "{{ protocol_config }}"
